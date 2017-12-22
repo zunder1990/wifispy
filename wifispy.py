@@ -10,12 +10,7 @@ import Queue
 import sqlite3
 import pcapy
 import dpkt
-
-# mac
-# interface = 'en0'
-# monitor_enable  = 'tcpdump -i en0 -Ic1 -py IEEE802_11'
-# monitor_disable = 'tcpdump -i en0 -Ic1'
-# change_channel  = 'airport en0 channel {}'
+import socket
 
 # linux
 interface = 'wlan1mon'
@@ -23,7 +18,9 @@ monitor_enable  = 'ifconfig wlan1 down; iw dev wlan1 interface add wlan1mon type
 monitor_disable = 'iw dev wlan1mon del; ifconfig wlan1 up'
 change_channel  = 'iw dev wlan1mon set channel %s'
 
-channels = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] # 2.4GHz only
+channels = [1, 6, 11,] # 2.4GHz only
+
+hostname = socket.gethostname()
 
 queue = multiprocessing.Queue()
 
@@ -114,7 +111,8 @@ def writer():
                         ":source_address,"
                         ":destination_address,"
                         ":access_point_name,"
-                        ":access_point_address"
+                        ":access_point_address,"
+                        ":collector_hostname"
                         ")"
                     )
                     cursor.execute(insert.decode('utf-8'), item)
@@ -134,7 +132,8 @@ def writer():
         "source_address,"
         "destination_address,"
         "access_point_name,"
-        "access_point_address"
+        "access_point_address,"
+        "collector_hostname"
         ")"
     )
     cursor.execute(create.decode('utf-8'))
@@ -168,7 +167,8 @@ def sniff(interface):
                     'source_address': to_address(frame.mgmt.src),
                     'destination_address': to_address(frame.mgmt.dst),
                     'access_point_name': frame.ssid.data if hasattr(frame, 'ssid') else '(n/a)',
-                    'access_point_address': to_address(frame.mgmt.bssid)
+                    'access_point_address': to_address(frame.mgmt.bssid),
+                    'collector_hostname': hostname
                 }
                 queue.put(record)
             elif frame.type == dpkt.ieee80211.CTL_TYPE:
@@ -180,7 +180,8 @@ def sniff(interface):
                     'source_address': '(n/a)', # not available in control packets
                     'destination_address': '(n/a)', # not available in control packets
                     'access_point_name': '(n/a)', # not available in control packets
-                    'access_point_address': '(n/a)' # not available in control packets
+                    'access_point_address': '(n/a)', # not available in control packets
+                    'collector_hostname': hostname
                 }
                 queue.put(record)
             elif frame.type == dpkt.ieee80211.DATA_TYPE:
@@ -192,7 +193,8 @@ def sniff(interface):
                     'source_address': to_address(frame.data_frame.src),
                     'destination_address': to_address(frame.data_frame.dst),
                     'access_point_name': '(n/a)', # not available in data packets
-                    'access_point_address': to_address(frame.data_frame.bssid) if hasattr(frame.data_frame, 'bssid') else '(n/a)'
+                    'access_point_address': to_address(frame.data_frame.bssid) if hasattr(frame.data_frame, 'bssid') else '(n/a)',
+                    'collector_hostname': hostname
                 }
                 queue.put(record)
         except Exception as e:
